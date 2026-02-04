@@ -24,6 +24,14 @@ jobs:
         with:
           node-version: '18'
 
+      # 构建前用备份覆盖 AiAssistantTab.vue，避免网页编辑/编码导致解析失败
+      - name: Use fallback AiAssistantTab.vue
+        run: |
+          if [ -f .github/fallback/AiAssistantTab.vue.txt ]; then
+            cp .github/fallback/AiAssistantTab.vue.txt ui/src/views/AiAssistantTab.vue
+            echo "Applied fallback AiAssistantTab.vue"
+          fi
+
       - name: Install UI deps
         working-directory: ui
         run: npm install
