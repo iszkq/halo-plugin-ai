@@ -24,13 +24,142 @@ jobs:
         with:
           node-version: '18'
 
-      # 构建前用备份覆盖 AiAssistantTab.vue，避免网页编辑/编码导致解析失败
-      - name: Use fallback AiAssistantTab.vue
+      # 构建前强制写入合法 Vue 单文件，避免仓库内文件编码/空文件导致解析失败
+      - name: Ensure AiAssistantTab.vue is valid
         run: |
-          if [ -f .github/fallback/AiAssistantTab.vue.txt ]; then
-            cp .github/fallback/AiAssistantTab.vue.txt ui/src/views/AiAssistantTab.vue
-            echo "Applied fallback AiAssistantTab.vue"
-          fi
+          mkdir -p ui/src/views
+          cat << 'VUEEOF' | sed 's/^          //' > ui/src/views/AiAssistantTab.vue
+          <template>
+            <div class="ai-assistant-page">
+              <div class="layout">
+                <section class="knowledge-panel">
+                  <header><h2>知识库</h2><p>维护 RAG 知识条目。</p><button class="btn-primary" @click="startCreate">新增</button></header>
+                  <div class="knowledge-list">
+                    <div v-for="item in knowledge" :key="item.id" class="knowledge-item" @click="editItem(item)">
+                      <div class="title">{{ item.title || "(无标题)" }}</div>
+                      <div class="snippet">{{ (item.content || "").slice(0,80) }}{{ (item.content||"").length > 80 ? "…" : "" }}</div>
+                    </div>
+                    <div v-if="!knowledge.length" class="empty-tip">暂无条目，请新增。</div>
+                  </div>
+                  <div v-if="editing" class="knowledge-editor">
+                    <h3>{{ editing.id ? "编辑" : "新增" }}</h3>
+                    <label>标题 <input v-model="editing.title" /></label>
+                    <label>内容 <textarea v-model="editing.content" rows="6"></textarea></label>
+                    <div class="editor-actions">
+                      <button type="button" class="btn-secondary" @click="cancelEdit">取消</button>
+                      <button v-if="editing.id" class="btn-danger" @click="handleDelete">删除</button>
+                      <button class="btn-primary" @click="handleSave">保存</button>
+                    </div>
+                  </div>
+                </section>
+                <section class="chat-panel">
+                  <header><h2>AI 助手（RAG）</h2></header>
+                  <div class="chat-history" ref="historyRef">
+                    <div v-for="(m,idx) in messages" :key="idx" class="chat-message" :class="m.role">
+                      <div class="role">{{ m.role === "user" ? "我" : "助手" }}</div>
+                      <div class="content"><pre v-if="m.role==='assistant'">{{ m.content }}</pre><span v-else>{{ m.content }}</span></div>
+                    </div>
+                    <div v-if="loading" class="chat-loading">思考中…</div>
+                  </div>
+                  <form class="chat-input" @submit.prevent="handleSend">
+                    <textarea v-model="question" rows="3" placeholder="输入问题"></textarea>
+                    <div class="actions">
+                      <button type="button" class="btn-secondary" @click="clearChat">清空</button>
+                      <button type="submit" class="btn-primary" :disabled="loading || !question.trim()">{{ loading ? "…" : "发送" }}</button>
+                    </div>
+                  </form>
+                  <div v-if="sources.length" class="sources">
+                    <h3>参考</h3>
+                    <ul><li v-for="s in sources" :key="s.id"><div class="title">{{ s.title }}</div><div class="snippet">{{ s.snippet }}</div></li></ul>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </template>
+          <script setup lang="ts">
+          import { nextTick, onMounted, ref, watch } from "vue"
+          import type { AiMessage, AiSource, KnowledgeItem } from "../api/aiAssistant"
+          import { chatWithAi, listKnowledge, createKnowledge, updateKnowledge, deleteKnowledge } from "../api/aiAssistant"
+          const knowledge = ref<KnowledgeItem[]>([])
+          const editing = ref<KnowledgeItem | null>(null)
+          const question = ref("")
+          const loading = ref(false)
+          const messages = ref<AiMessage[]>([])
+          const sources = ref<AiSource[]>([])
+          const historyRef = ref<HTMLElement | null>(null)
+          async function loadKnowledge() { try { knowledge.value = await listKnowledge() } catch (e) { console.error(e) } }
+          onMounted(() => loadKnowledge())
+          function startCreate() { editing.value = { id: "", title: "", content: "" } }
+          function editItem(item: KnowledgeItem) { editing.value = { ...item } }
+          function cancelEdit() { editing.value = null }
+          async function handleSave() {
+            if (!editing.value) return
+            const p = { title: editing.value.title || "", content: editing.value.content || "" }
+            try {
+              if (editing.value.id) await updateKnowledge(editing.value.id, p)
+              else await createKnowledge(p)
+              editing.value = null
+              await loadKnowledge()
+            } catch (e) { console.error(e) }
+          }
+          async function handleDelete() {
+            if (!editing.value?.id) return
+            try { await deleteKnowledge(editing.value.id); editing.value = null; await loadKnowledge() } catch (e) { console.error(e) }
+          }
+          function scrollToBottom() { nextTick(() => { if (historyRef.value) historyRef.value.scrollTop = historyRef.value.scrollHeight }) }
+          watch(() => messages.value.length, scrollToBottom)
+          async function handleSend() {
+            const q = question.value.trim()
+            if (!q || loading.value) return
+            messages.value.push({ role: "user", content: q })
+            question.value = ""
+            loading.value = true
+            try {
+              const resp = await chatWithAi({ question: q, history: messages.value.filter(m => m.role !== "assistant" || m.content.trim()), topK: 5 })
+              messages.value.push({ role: "assistant", content: resp.answer })
+              sources.value = resp.sources ?? []
+            } catch (e: unknown) {
+              const msg = e instanceof Error ? e.message : "请求失败"
+              messages.value.push({ role: "assistant", content: "错误: " + msg })
+            } finally { loading.value = false }
+          }
+          function clearChat() { messages.value = []; sources.value = [] }
+          </script>
+          <style scoped>
+          .ai-assistant-page { padding: 16px; }
+          .layout { display: grid; grid-template-columns: 1.2fr 2fr; gap: 16px; }
+          section { border-radius: 8px; background: #fff; padding: 12px 14px; box-shadow: 0 1px 2px rgba(15,23,42,.06); }
+          header h2 { margin: 0 0 4px; font-size: 18px; }
+          header p { margin: 0 0 8px; font-size: 12px; color: #6b7280; }
+          .knowledge-list { margin-top: 8px; max-height: 220px; overflow-y: auto; border-radius: 6px; border: 1px solid #e5e7eb; padding: 6px; background: #f9fafb; }
+          .knowledge-item { padding: 6px 8px; border-radius: 4px; cursor: pointer; }
+          .knowledge-item:hover { background: #e5e7eb; }
+          .knowledge-item .title { font-size: 13px; font-weight: 600; }
+          .knowledge-item .snippet { font-size: 12px; color: #6b7280; }
+          .empty-tip { font-size: 12px; color: #9ca3af; text-align: center; padding: 12px; }
+          .knowledge-editor { margin-top: 10px; }
+          .knowledge-editor label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; font-size: 12px; }
+          .knowledge-editor input, .knowledge-editor textarea { border-radius: 4px; border: 1px solid #d1d5db; padding: 6px 8px; }
+          .editor-actions { display: flex; justify-content: flex-end; gap: 8px; }
+          .chat-history { margin-top: 8px; border-radius: 6px; background: #f3f4f6; padding: 8px; height: 260px; overflow-y: auto; }
+          .chat-message { display: flex; gap: 6px; margin-bottom: 6px; }
+          .chat-message .role { font-size: 12px; font-weight: 600; width: 40px; color: #4b5563; }
+          .chat-message .content { flex: 1; font-size: 13px; white-space: pre-wrap; }
+          .chat-loading { font-size: 12px; color: #6b7280; }
+          .chat-input { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+          .chat-input textarea { border-radius: 4px; border: 1px solid #d1d5db; padding: 6px 8px; }
+          .chat-input .actions { display: flex; justify-content: flex-end; gap: 8px; }
+          .sources { margin-top: 10px; }
+          .sources ul { list-style: none; padding: 0; margin: 0; font-size: 13px; }
+          .sources li + li { margin-top: 6px; padding-top: 6px; border-top: 1px solid #e5e7eb; }
+          .btn-primary, .btn-secondary, .btn-danger { border-radius: 4px; border: none; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+          .btn-primary { background: #2563eb; color: #fff; }
+          .btn-secondary { background: #e5e7eb; color: #111; }
+          .btn-danger { background: #ef4444; color: #fff; }
+          @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
+          </style>
+          VUEEOF
+          echo "AiAssistantTab.vue written from workflow"
 
       - name: Install UI deps
         working-directory: ui
