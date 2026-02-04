@@ -1,0 +1,258 @@
+commonModelChildren: &modelSelector
+  - $formkit: select
+    name: provider
+    id: provider
+    key: provider
+    label: 模型供应商
+    searchable: true
+    autoSelect: false
+    validation: required
+    options:
+      - value: openai
+        label: OpenAI（官方）
+      - value: openailike
+        label: OpenAI 兼容模型
+      - value: deepseek
+        label: DeepSeek
+      - value: siliconflow
+        label: 硅基流动
+      - value: doubao
+        label: 豆包大模型
+      - value: ernie
+        label: 文心一言
+      - value: zhipuai
+        label: 智谱AI
+      - value: ollama
+        label: Ollama（本地部署）
+  - $formkit: select
+    if: "$value.provider == openai"
+    id: openaiModel
+    key: openaiModel
+    name: model
+    label: 模型
+    action: /apis/console.api.ai.halo.run/v1alpha1/models/openai
+    searchable: true
+    autoSelect: false
+    validation: required
+    requestOption:
+      method: GET
+      fieldSelectorKey: name
+    help: 模型列表
+  - $formkit: select
+    if: "$value.provider == openailike"
+    id: openAILikeModel
+    key: openAILikeModel
+    name: model
+    label: 模型
+    help: 可以直接输入模型名称后回车，或从下拉列表中选择
+    allowCreate: true
+    searchable: true
+    autoSelect: false
+    validation: required
+    options:
+      - value: gpt-4.1-mini
+        label: gpt-4.1-mini
+      - value: gpt-4.1
+        label: gpt-4.1
+      - value: gpt-3.5-turbo
+        label: gpt-3.5-turbo
+  - $formkit: select
+    if: "$value.provider == deepseek"
+    id: deepseekModel
+    key: deepseekModel
+    name: model
+    label: 模型
+    searchable: true
+    allowCreate: true
+    autoSelect: false
+    validation: required
+    options:
+      - value: deepseek-chat
+        label: DeepSeek-Chat
+      - value: deepseek-reasoner
+        label: DeepSeek-Reasoner
+  - $formkit: select
+    if: "$value.provider == siliconflow"
+    id: siliconFlowModel
+    key: siliconFlowModel
+    name: model
+    label: 模型
+    action: /apis/console.api.ai.halo.run/v1alpha1/models/siliconflow
+    searchable: true
+    autoSelect: false
+    validation: required
+    requestOption:
+      method: GET
+      fieldSelectorKey: name
+  - $formkit: select
+    if: "$value.provider == doubao"
+    id: doubaoModel
+    key: doubaoModel
+    name: model
+    label: 模型
+    searchable: true
+    allowCreate: true
+    autoSelect: false
+    validation: required
+  - $formkit: select
+    if: "$value.provider == ernie"
+    id: ernieModel
+    key: ernieModel
+    name: model
+    label: 模型
+    searchable: true
+    allowCreate: true
+    autoSelect: false
+    validation: required
+  - $formkit: select
+    if: "$value.provider == zhipuai"
+    id: zhiPuModel
+    key: zhiPuModel
+    name: model
+    label: 模型
+    searchable: true
+    allowCreate: true
+    autoSelect: false
+    validation: required
+  - $formkit: select
+    if: "$value.provider == ollama"
+    id: ollamaModel
+    key: ollamaModel
+    name: model
+    label: 模型
+    searchable: true
+    allowCreate: true
+    autoSelect: false
+    validation: required
+
+apiVersion: v1alpha1
+kind: Setting
+metadata:
+  name: plugin-ai-assistant-settings
+spec:
+  forms:
+    - group: provider
+      label: 模型供应商
+      formSchema:
+        - $formkit: group
+          name: openAILike
+          label: OpenAI 兼容模型
+          help: 支持遵循 OpenAI 接口规范的模型，需要配置接口地址与 API Key。优先推荐使用 OpenAI 官方或深度求索等服务。
+          value:
+            baseUrl: "https://api.openai.com"
+            token: ""
+          children:
+            - $formkit: text
+              label: 接口地址
+              help: 默认为 OpenAI 官方地址，可以填写其它兼容平台的地址（例如：https://api.openai.com），不带 /v1 路径。
+              name: baseUrl
+              validation: url
+            - $formkit: password
+              label: API Key
+              name: token
+        - $formkit: group
+          name: openAI
+          label: OpenAI
+          help: 支持 OpenAI 官方模型。
+          value:
+            token: ""
+          children:
+            - $formkit: password
+              label: API Key
+              help: 可在 https://platform.openai.com/settings/organization/api-keys 获取
+              name: token
+        - $formkit: group
+          name: deepseek
+          label: DeepSeek
+          value:
+            baseUrl: "https://api.deepseek.com"
+            token: ""
+          children:
+            - $formkit: text
+              label: 接口地址
+              name: baseUrl
+              validation: url
+            - $formkit: password
+              label: API Key
+              name: token
+        - $formkit: group
+          name: siliconFlow
+          label: 硅基流动
+          value:
+            token: ""
+          children:
+            - $formkit: password
+              label: API Key
+              name: token
+        - $formkit: group
+          name: doubao
+          label: 豆包大模型
+          value:
+            token: ""
+          children:
+            - $formkit: password
+              label: API Key
+              name: token
+        - $formkit: group
+          name: ernie
+          label: 文心一言
+          value:
+            token: ""
+          children:
+            - $formkit: password
+              label: API Key
+              name: token
+        - $formkit: group
+          name: zhiPuAI
+          label: 智谱AI
+          value:
+            token: ""
+          children:
+            - $formkit: password
+              label: API Key
+              name: token
+        - $formkit: group
+          name: ollama
+          label: Ollama
+          value:
+            baseUrl: "http://localhost:11434"
+          children:
+            - $formkit: text
+              label: 接口地址
+              name: baseUrl
+              validation: url
+    - group: rag
+      label: RAG 智能问答
+      formSchema:
+        - $formkit: checkbox
+          name: enabled
+          id: ragEnabled
+          key: ragEnabled
+          help: RAG 是一种结合信息检索和文本生成的 AI 技术，通过先从知识库中检索相关信息，再基于检索到的内容生成更准确、更有依据的回答。
+          label: 启用智能问答功能
+          value: true
+    - group: proxy
+      label: 全局代理
+      formSchema:
+        - $formkit: radio
+          label: 启用代理
+          name: enabled
+          id: proxyEnabled
+          key: proxyEnabled
+          value: false
+          options:
+            - value: true
+              label: 开启
+            - value: false
+              label: 关闭
+        - $formkit: text
+          if: "$get(proxyEnabled).value === true"
+          label: 代理地址
+          name: proxyHost
+          validation: required
+        - $formkit: text
+          if: "$get(proxyEnabled).value === true"
+          label: 代理端口
+          name: proxyPort
+          validation: required|Number|between:0,65535
+

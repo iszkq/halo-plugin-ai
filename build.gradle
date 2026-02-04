@@ -1,0 +1,83 @@
+plugins {
+    id 'java'
+    id "io.freefair.lombok" version "8.13"
+    id "run.halo.plugin.devtools" version "0.6.1"
+}
+
+group 'run.halo.assistant'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation platform('run.halo.tools.platform:plugin:2.22.0')
+    compileOnly 'run.halo.app:api'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+    testImplementation 'run.halo.app:api'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.release = 21
+}
+
+def uiDir = layout.projectDirectory.dir('ui').asFile
+tasks.register('buildUi', Exec) {
+    description = '在 ui 目录执行 npm install 与 npm run build'
+    group = 'build'
+    workingDir = uiDir
+    if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+        commandLine 'cmd', '/c', 'npm install && npm run build'
+    } else {
+        commandLine 'sh', '-c', 'npm install && npm run build'
+    }
+}
+
+tasks.register('checkUiBuild') {
+    dependsOn tasks.named('buildUi')
+    doLast {
+        def distDir = layout.projectDirectory.dir('ui/build/dist').asFile
+        if (!distDir.exists()) {
+            throw new GradleException(
+                '未检测到 ui/build/dist。请先执行：cd ui && npm install && npm run build，再执行 Gradle 打包。'
+            )
+        }
+        def hasJs = distDir.listFiles()?.any { it.name.endsWith('.js') }
+        if (!hasJs) {
+            throw new GradleException(
+                'ui/build/dist 下没有 .js 文件。请先执行：cd ui && npm run build，再执行 Gradle 打包。'
+            )
+        }
+    }
+}
+
+tasks.register('processUiResources', Copy) {
+    dependsOn tasks.named('checkUiBuild')
+    from layout.projectDirectory.dir('ui/build/dist')
+    into layout.buildDirectory.dir('resources/main/console')
+    shouldRunAfter tasks.named('processResources')
+}
+
+tasks.named('classes') {
+    dependsOn tasks.named('processUiResources')
+}
+
+halo {
+    version = '2.22'
+}
+
