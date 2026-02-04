@@ -117,7 +117,7 @@ const historyRef = ref<HTMLElement | null>(null)
 async function loadKnowledge() {
   try {
     knowledge.value = await listKnowledge()
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('加载知识库失败', e)
   }
 }
@@ -149,7 +149,7 @@ async function handleSave() {
     }
     editing.value = null
     await loadKnowledge()
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('保存知识条目失败', e)
   }
 }
@@ -161,7 +161,7 @@ async function handleDelete() {
     await deleteKnowledge(id)
     editing.value = null
     await loadKnowledge()
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('删除知识条目失败', e)
   }
 }
@@ -194,8 +194,8 @@ async function handleSend() {
     })
     messages.value.push({ role: 'assistant', content: resp.answer })
     sources.value = resp.sources ?? []
-  } catch (e: any) {
-    const msg = e?.message || '请求失败，请检查 AI 助手后端是否可用。'
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : '请求失败，请检查 AI 助手后端是否可用。'
     messages.value.push({
       role: 'assistant',
       content: `调用 AI 助手接口失败：${msg}`,
@@ -449,4 +449,3 @@ header {
   }
 }
 </style>
-
