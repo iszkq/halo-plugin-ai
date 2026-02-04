@@ -18,7 +18,6 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
-          cache: 'gradle'
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -29,8 +28,14 @@ jobs:
         working-directory: ui
         run: npm install
 
-      - name: Build plugin
-        run: ./gradlew clean build --no-daemon
+      # 在 GitHub runner 上安装并配置 Gradle（不需要仓库里有 gradlew）
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+
+      - name: Build plugin with Gradle
+        run: gradle clean build --no-daemon
 
       - name: Upload JAR artifact
         uses: actions/upload-artifact@v4
